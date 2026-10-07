@@ -1,34 +1,40 @@
-import { Client as WorkflowClient } from '@upstash/workflow';
-import { Client as QstashClient, resend } from "@upstash/qstash";
-import config from './config'
+import emailjs from '@emailjs/nodejs';
+import config from './config';
+import {  Client as WorkflowClient } from "@upstash/workflow";
 
 export const workflowClient = new WorkflowClient({
     baseUrl: config.env.upstash.qstashUrl,
     token: config.env.upstash.qstashToken,
 });
 
+type SendEmailParams = {
+  email: string;
+  name: string;
+};
 
-const qstashClient = new QstashClient({ token: config.env.upstash.qstashToken });
+export const sendEmail = async ({
+  email,
+  name
+}: SendEmailParams) => {
+  try {
+    const response = await emailjs.send(
+      config.env.emailjs.serviceId,
+      config.env.emailjs.templateId,
+      {
+        to_email: email,
+        name
+      },
+      {
+        publicKey: config.env.emailjs.publicKey,
+        privateKey: config.env.emailjs.privateKey,
+      }
+    );
 
-export const sendEmail = async({ 
-    email, 
-    subject, 
-    message 
-}: { 
-    email: string, 
-    subject: string, 
-    message: string,
-}) => {
-    await qstashClient.publishJSON({
-        api: {
-            name: "email",
-            provider: resend({ token: config.env.resendToken }),
-        },
-        body: {
-            from: "KrishDev <onboarding@resend.dev>",
-            to: [email],
-            subject,
-            html: message,
-        },
-    });
-}
+    console.log('Email sent successfully:', response.status);
+
+    return response;
+  } catch (error) {
+    console.error('EmailJS error:', error);
+    throw error;
+  }
+};

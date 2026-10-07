@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
+    "@emailjs/nodejs": "^5.0.2",
     "@fortawesome/fontawesome-svg-core": "^7.3.1",
     "@fortawesome/free-regular-svg-icons": "^7.3.1",
     "@fortawesome/react-fontawesome": "^3.5.0",

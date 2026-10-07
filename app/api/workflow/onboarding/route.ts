@@ -42,36 +42,33 @@ export const { POST } = serve<InitialData>(async (context) => {
   await context.run("new-signup", async () => {
     await sendEmail({
       email,
-      subject: 'Welcome to the BookWise',
-      message: `Welcome ${fullName}`
+      name: fullName,
     })
   })
 
-  await context.sleep("wait-for-3-days", 60 * 60 * 24 * 3);
+  // await context.sleep("wait-for-3-days", 60 * 60 * 24 * 3);
 
-  while (true) {
-    const state = await context.run("check-user-state", async () => {
-      return await getUserState(email)
-    })
+  // while (true) {
+  //   const state = await context.run("check-user-state", async () => {
+  //     return await getUserState(email)
+  //   })
 
-    if (state === "non-active") {
-      await context.run("send-email-non-active", async () => {
-        await sendEmail({
-          email,
-          subject: 'Are you still there?',
-          message: `Hey ${fullName}, we miss you`,
-        })
-      })
-    } else if (state === "active") {
-      await context.run("send-email-active", async () => {
-        await sendEmail({
-          email,
-          subject: "Welcome Back!",
-          message: `Welcome back ${fullName}`
-        })
-      })
-    }
+  //   if (state === "non-active") {
+  //     await context.run("send-email-non-active", async () => {
+  //       await sendEmail({
+  //         email,
+  //         name: fullName
+  //       })
+  //     })
+  //   } else if (state === "active") {
+  //     await context.run("send-email-active", async () => {
+  //       await sendEmail({
+  //         email,
+  //         name: fullName
+  //       })
+  //     })
+  //   }
 
-    await context.sleep("wait-for-1-month", 60 * 60 * 24 * 30);
-  }
+  //   await context.sleep("wait-for-1-month", 60 * 60 * 24 * 30);
+  // }
 });

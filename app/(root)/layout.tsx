@@ -23,6 +23,8 @@ const Layout = async({ children }: { children: ReactNode}) => {
             .where(eq(users.id, session?.user?.id))
             .limit(1);
 
+    
+    if (!user[0]) return;
     if(user[0].lastActivityDate === new Date().toISOString().slice(2, 10)) return;
 
     await db
