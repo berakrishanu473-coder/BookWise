@@ -47,7 +47,7 @@ export const { POST } = serve<InitialData>(async (context) => {
     })
   })
 
-  await context.sleep("wait-for-3-days", THREE_DAYS_IN_MS);
+  await context.sleep("wait-for-3-days", 60 * 60 * 24 * 3);
 
   while (true) {
     const state = await context.run("check-user-state", async () => {
@@ -72,6 +72,6 @@ export const { POST } = serve<InitialData>(async (context) => {
       })
     }
 
-    await context.sleep("wait-for-1-month", THIRTY_DAYS_IN_MS)
+    await context.sleep("wait-for-1-month", 60 * 60 * 24 * 30);
   }
 });
