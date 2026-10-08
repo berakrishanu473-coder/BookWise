@@ -10,12 +10,16 @@ export const workflowClient = new WorkflowClient({
 type SendEmailParams = {
   email: string;
   name: string;
+  subject?: string;
+  message?: string;
   templateId: string;
 };
 
 export const sendEmail = async ({
   email,
   name,
+  subject,
+  message,
   templateId
 }: SendEmailParams) => {
   try {
@@ -24,7 +28,9 @@ export const sendEmail = async ({
       templateId,
       {
         to_email: email,
-        name
+        name,
+        subject,
+        message
       },
       {
         publicKey: config.env.emailjs.publicKey,

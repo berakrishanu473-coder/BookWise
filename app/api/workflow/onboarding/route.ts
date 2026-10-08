@@ -1,84 +1,155 @@
 import { db } from "@/database/drizzle";
 import { users } from "@/database/schema";
-import { serve } from "@upstash/workflow/nextjs"
+import { serve } from "@upstash/workflow/nextjs";
 import { eq } from "drizzle-orm";
 import { sendEmail } from "@/lib/workflow";
 import config from "@/lib/config";
 
-type UserState = 'active' | 'non-active';
-
 type InitialData = {
   email: string;
-  fullName: string
-}
+  fullName: string;
+};
 
-const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
-const THREE_DAYS_IN_MS = 3 * ONE_DAY_IN_MS;
-const THIRTY_DAYS_IN_MS = 30 * ONE_DAY_IN_MS;
+const ONE_DAY = 60 * 60 * 24;
+const THREE_DAYS = ONE_DAY * 3;
+const THIRTY_DAYS = ONE_DAY * 30;
 
-const getUserState = async(email: string): Promise<UserState> => {
+const getLastActivity = async (email: string) => {
   const user = await db
-                .select()
-                .from(users)
-                .where(eq(users.email, email))
-                .limit(1);
+    .select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
 
-  if (!user[0]) return "non-active";
-  if(user.length === 0) return 'non-active';
-  if (!user[0].lastActivityDate) {
-    return "non-active";
+  if (!user[0] || !user[0].lastActivityDate) {
+    return null;
   }
 
-  const lastActivityDate = new Date(user[0].lastActivityDate!);
-  const now = new Date();
-  const timeDiff = now.getTime() - lastActivityDate.getTime();
-
-  if(timeDiff > (60 * 1000) && timeDiff <= THIRTY_DAYS_IN_MS) {
-    return 'non-active';
-  }
-
-  return 'active';
-}
+  return new Date(user[0].lastActivityDate).getTime();
+};
 
 export const { POST } = serve<InitialData>(async (context) => {
   const { email, fullName } = context.requestPayload;
 
-  // welcome email
+  // 1. Send signup welcome email
   await context.run("new-signup", async () => {
     await sendEmail({
       email,
       name: fullName,
-      templateId: config.env.emailjs.templateId
-    })
-  })
+      templateId: config.env.emailjs.templateId,
+    });
+  });
 
-  await context.sleep("wait-for-3-days", 60);
+  // 2. Wait 3 days after signup
+  await context.sleep(
+    "wait-for-3-days",
+    THREE_DAYS
+  );
 
+  // 3. Monthly cycle starts here
   while (true) {
-    const state = await context.run("check-user-state", async () => {
-      return await getUserState(email)
-    })
 
-    // non-active email
-    if (state === "non-active") {
-      await context.run("send-email-non-active", async () => {
+    // Check user's latest activity
+    const lastActivity = await context.run(
+      "check-user-activity",
+      async () => {
+        return await getLastActivity(email);
+      }
+    );
+
+    if (!lastActivity) {
+      return;
+    }
+
+    const inactiveFor = Date.now() - lastActivity;
+
+    // USER IS ACTIVE
+    if (inactiveFor <= THREE_DAYS) {
+
+      // User is active, so don't send anything.
+      // Wait 30 days before checking again.
+      await context.sleep(
+        "wait-for-next-month",
+        THIRTY_DAYS
+      );
+
+      continue;
+    }
+
+    // USER IS INACTIVE
+    await context.run(
+      "send-email-non-active",
+      async () => {
         await sendEmail({
           email,
           name: fullName,
-          templateId: config.env.emailjs.inactiveTemplateId
-        })
-      })
-    } 
-    //else if (state === "active") {
-    //   await context.run("send-email-active", async () => {
-    //     await sendEmail({
-    //       email,
-    //       name: fullName,
-    //       templateId: config.env.emailjs.templateId
-    //     })
-    //   })
-    // }
+          subject: `We miss you at BookWise, ${fullName}!!`,
+          message:
+            "It's been a little while since we've seen you. Come back and explore your university library!",
+          templateId:
+            config.env.emailjs.inactiveTemplateId,
+        });
+      }
+    );
 
-    await context.sleep("wait-for-1-month", 60 * 60 * 24 * 30);
+    // Remember the activity that existed
+    // when we detected inactivity.
+    const inactiveActivity = lastActivity;
+
+    // Check for return every day for 30 days
+    let userReturned = false;
+
+    for (let day = 1; day <= 30; day++) {
+
+      await context.sleep(
+        `wait-for-return-day-${day}`,
+        ONE_DAY
+      );
+
+      const latestActivity = await context.run(
+        `check-return-activity-${day}`,
+        async () => {
+          return await getLastActivity(email);
+        }
+      );
+
+      if (!latestActivity) {
+        continue;
+      }
+
+      // User returned after becoming inactive
+      if (latestActivity > inactiveActivity) {
+
+        await context.run(
+          "send-email-welcome-back",
+          async () => {
+            await sendEmail({
+              email,
+              name: fullName,
+              subject: `Welcome back to BookWise, ${fullName}!!`,
+              message:
+                "We're happy to see you again. Explore books and make the most of your university library!",
+              templateId:
+                config.env.emailjs.inactiveTemplateId,
+            });
+          }
+        );
+
+        userReturned = true;
+        break;
+      }
+    }
+
+    // After return OR 30 days of no return,
+    // start the next monthly cycle.
+    if (userReturned) {
+      await context.sleep(
+        "wait-for-next-month",
+        THIRTY_DAYS
+      );
+    }
+
+    // If user didn't return for 30 days,
+    // while(true) automatically starts another cycle.
   }
 });
