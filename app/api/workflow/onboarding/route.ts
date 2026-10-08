@@ -3,6 +3,7 @@ import { users } from "@/database/schema";
 import { serve } from "@upstash/workflow/nextjs"
 import { eq } from "drizzle-orm";
 import { sendEmail } from "@/lib/workflow";
+import config from "@/lib/config";
 
 type UserState = 'active' | 'non-active';
 
@@ -22,13 +23,17 @@ const getUserState = async(email: string): Promise<UserState> => {
                 .where(eq(users.email, email))
                 .limit(1);
 
+  if (!user[0]) return "non-active";
   if(user.length === 0) return 'non-active';
+  if (!user[0].lastActivityDate) {
+    return "non-active";
+  }
 
   const lastActivityDate = new Date(user[0].lastActivityDate!);
   const now = new Date();
   const timeDiff = now.getTime() - lastActivityDate.getTime();
 
-  if(timeDiff > THREE_DAYS_IN_MS && timeDiff <= THIRTY_DAYS_IN_MS) {
+  if(timeDiff > (60 * 1000) && timeDiff <= THIRTY_DAYS_IN_MS) {
     return 'non-active';
   }
 
@@ -43,32 +48,37 @@ export const { POST } = serve<InitialData>(async (context) => {
     await sendEmail({
       email,
       name: fullName,
+      templateId: config.env.emailjs.templateId
     })
   })
 
-  // await context.sleep("wait-for-3-days", 60 * 60 * 24 * 3);
+  await context.sleep("wait-for-3-days", 60);
 
-  // while (true) {
-  //   const state = await context.run("check-user-state", async () => {
-  //     return await getUserState(email)
-  //   })
+  while (true) {
+    const state = await context.run("check-user-state", async () => {
+      return await getUserState(email)
+    })
 
-  //   if (state === "non-active") {
-  //     await context.run("send-email-non-active", async () => {
-  //       await sendEmail({
-  //         email,
-  //         name: fullName
-  //       })
-  //     })
-  //   } else if (state === "active") {
-  //     await context.run("send-email-active", async () => {
-  //       await sendEmail({
-  //         email,
-  //         name: fullName
-  //       })
-  //     })
-  //   }
+    // non-active email
+    if (state === "non-active") {
+      await context.run("send-email-non-active", async () => {
+        await sendEmail({
+          email,
+          name: fullName,
+          templateId: config.env.emailjs.inactiveTemplateId
+        })
+      })
+    } 
+    //else if (state === "active") {
+    //   await context.run("send-email-active", async () => {
+    //     await sendEmail({
+    //       email,
+    //       name: fullName,
+    //       templateId: config.env.emailjs.templateId
+    //     })
+    //   })
+    // }
 
-  //   await context.sleep("wait-for-1-month", 60 * 60 * 24 * 30);
-  // }
+    await context.sleep("wait-for-1-month", 60 * 60 * 24 * 30);
+  }
 });

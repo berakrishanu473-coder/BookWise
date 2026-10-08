@@ -10,16 +10,18 @@ export const workflowClient = new WorkflowClient({
 type SendEmailParams = {
   email: string;
   name: string;
+  templateId: string;
 };
 
 export const sendEmail = async ({
   email,
-  name
+  name,
+  templateId
 }: SendEmailParams) => {
   try {
     const response = await emailjs.send(
       config.env.emailjs.serviceId,
-      config.env.emailjs.templateId,
+      templateId,
       {
         to_email: email,
         name
