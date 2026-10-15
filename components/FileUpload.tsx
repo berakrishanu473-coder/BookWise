@@ -9,7 +9,7 @@ import {
     ImageKitInvalidRequestError,
     ImageKitServerError,
     ImageKitUploadNetworkError,
-    upload 
+    upload, 
 } from '@imagekit/next';
 import { useRef, useState } from 'react';
 import { Button } from './ui/button';
@@ -20,6 +20,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCircleCheck } from "@fortawesome/free-regular-svg-icons";
 import { faCircleXmark } from "@fortawesome/free-regular-svg-icons";
 import { faImages } from "@fortawesome/free-regular-svg-icons";
+import { cn } from 'cn';
 
 const {
     env: {
@@ -47,22 +48,65 @@ const authenticator = async() => {
     }
 }
 
-interface ImageUploadProps {
-  onUpload: (url: string) => void;
+interface Props {
+    type: 'image' | 'video',
+    accept: string,
+    placeholder: string,
+    folder: string,
+    variant: 'dark' | 'light',
+    onUpload: (url: string) => void;
 }
 
-const ImageUpload = ({ onUpload }: ImageUploadProps) => {
+const FileUpload = ({
+    type,
+    accept,
+    placeholder,
+    folder,
+    variant, 
+    onUpload 
+}: Props) => {
     const ikUploadRef = useRef<HTMLInputElement>(null);
     // const [file, setFile] = useState<{ filepath: string } | null>(null);
     // State to keep track of the current upload progress (percentage)
     const [progress, setProgress] = useState(0);
     const [uploadError, setUploadError] = useState("");
-    const [uploadedImage, setUploadedImage] = useState("");
+    const [uploadedFile, setUploadedFile] = useState("");
+    const [isUploaded, setIsUploaded] = useState(false);
     // Create an AbortController instance to provide an option to cancel the upload if needed.
     const abortController = useRef<AbortController | null>(null);
 
+    const styles = {
+        button: variant === 'dark' ? 'bg-dark-300' : 'bg-slate-300 border-gray-100 border',
+        placeholder: variant === 'dark' ? 'text-light-100' : 'text-slate-300',
+        text: variant === 'dark' ? 'text-light-100' : 'text-dark-400',
+    }
+
+    const onValidate = (file: File) => {
+        if(type === 'image') {
+            if(file.size > 20 * 1024 * 1024) {
+                toast.add({
+                    title: 'File size is too large',
+                    description: 'Please upload a file that is less than 20MB in size',
+                });
+                return false;
+            }
+        } else if(type === 'video') {
+            if(file.size > 50 * 1024 * 1024) {
+                toast.add({
+                    title: 'File size is too large',
+                    description: 'Please upload a file that is less than 50MB in size',
+                });
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     const handleUpload = async () => {
         setProgress(0);
+        setIsUploaded(false);
+        setUploadError('');
         // setUploadedImage("");
         // Access the file input element using the ref
         const fileInput = ikUploadRef.current;
@@ -78,6 +122,19 @@ const ImageUpload = ({ onUpload }: ImageUploadProps) => {
         // Extract the first file from the file input
         const file = fileInput.files[0];
 
+        // call validation
+        if(!onValidate(file)) {
+            setUploadError(
+                type === 'image'
+                    ? 'Please upload an image smaller than 20MB'
+                    : 'Please upload a video smaller than 50MB'
+            );
+            fileInput.value = '';
+            return;
+        }
+
+        setUploadError('');
+
         abortController.current = new AbortController();
 
         // Retrieve authentication parameters for the upload.
@@ -87,6 +144,12 @@ const ImageUpload = ({ onUpload }: ImageUploadProps) => {
             // console.log("Authentication received:", authParams);
         } catch (authError) {
             console.error("Failed to authenticate for upload:", authError);
+
+            setUploadError('Authentication failed. Please try again.');
+            toast.add({
+                title: 'Authentication failed',
+                description: 'Please try again later.',
+            });
             return;
         }
         const { signature, expire, token, publicKey } = authParams;
@@ -100,6 +163,8 @@ const ImageUpload = ({ onUpload }: ImageUploadProps) => {
                 signature,
                 publicKey,
                 file,
+                folder: folder,
+                useUniqueFileName: true,
                 fileName: file.name, // Optionally set a custom file name
                 // Progress callback to update upload progress state
                 onProgress: (event) => {
@@ -111,23 +176,36 @@ const ImageUpload = ({ onUpload }: ImageUploadProps) => {
             });
             // console.log("Upload response:", uploadResponse);
             if (uploadResponse.url) {
-                setUploadedImage(uploadResponse.url);
+                setUploadedFile(uploadResponse.url);
+                setIsUploaded(true);
                 onUpload(uploadResponse.url);
             }
         } catch (error) {
-            // Handle specific error types provided by the ImageKit SDK.
+            let message = 'Something went wrong while uploading your file.';
+
             if (error instanceof ImageKitAbortError) {
-                console.error("Upload aborted:", error.reason);
+                message = 'Upload was cancelled.';
+                console.error('Upload aborted:', error.reason);
             } else if (error instanceof ImageKitInvalidRequestError) {
-                console.error("Invalid request:", error.message);
+                message = error.message;
+                console.error('Invalid request:', error.message);
             } else if (error instanceof ImageKitUploadNetworkError) {
-                console.error("Network error:", error.message);
+                message = 'Network error. Please check your internet connection.';
+                console.error('Network error:', error.message);
             } else if (error instanceof ImageKitServerError) {
-                console.error("Server error:", error.message);
+                message = 'ImageKit server error. Please try again later.';
+                console.error('Server error:', error.message);
             } else {
-                // Handle any other errors that may occur.
-                console.error("Upload error:", error);
+                console.error('Upload error:', error);
             }
+
+            setUploadError(message);
+            setProgress(0);
+
+            toast.add({
+                title: 'Upload failed',
+                description: message,
+            });
         }
     }
 
@@ -138,8 +216,9 @@ const ImageUpload = ({ onUpload }: ImageUploadProps) => {
        {/* File input element using React ref */}
             <Input
               type="file"
+              accept={accept}
               ref={ikUploadRef}
-              className='bg-dark-300 text-light-200'
+              className={cn('bg-dark-300 text-light-200', styles.placeholder)}
               onChange={() => {
                 setUploadError("");
             }}
@@ -154,7 +233,7 @@ const ImageUpload = ({ onUpload }: ImageUploadProps) => {
             {/* Button to trigger the upload process */}
             <Button 
                 type="button" 
-                className="form-btn"
+                className={cn('upload-btn text-base', styles.button)}
                 style={{fontSize: "16px"}} 
                 onClick={handleUpload}
             >
@@ -163,19 +242,30 @@ const ImageUpload = ({ onUpload }: ImageUploadProps) => {
             </Button>
             <br />
 
-            {uploadedImage && (
+            {uploadedFile && (
                 <div className="mt-6">
-                    <p className="mb-2 text-sm font-semibold text-light-100">
-                    Uploaded image
+                    <p className={cn("mb-2 text-sm font-semibold", styles.text)}>
+                    Uploaded {type}
                     </p>
 
-                    <Image
-                        src={uploadedImage}
-                        alt="Uploaded image"
-                        width={400}
-                        height={320}
-                        className="rounded-lg object-contain"
-                    />
+                    {type === 'image' ? (
+                        <Image
+                            src={uploadedFile}
+                            alt="Uploaded image"
+                            width={400}
+                            height={320}
+                            className="rounded-lg object-contain"
+                        />
+                    ) : type === 'video' ? (
+                        <video
+                            src={uploadedFile}
+                            controls
+                            className="max-w-full rounded-lg"
+                            style={{ width: 400, maxHeight: 320 }}
+                        >
+                            Your browser does not support video playback.
+                        </video>
+                    ) : null }
                 </div>
             )}
 
@@ -183,17 +273,17 @@ const ImageUpload = ({ onUpload }: ImageUploadProps) => {
             {/* Upload Progress */}
             <div className="mt-4 w-full space-y-2">
             <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-light-100">
+                <p className={cn("text-sm font-semibold", styles.text)}>
                 Upload progress
                 </p>
 
-                <p className="text-sm font-semibold text-white">
+                <p className={cn("text-sm font-semibold", styles.text)}>
                 {Math.round(progress)}%
                 </p>
             </div>
 
             <div
-                className="h-2 w-full overflow-hidden rounded-full bg-dark-600"
+                className="h-2 w-full overflow-hidden rounded-full bg-gray-400"
                 role="progressbar"
                 aria-label="Upload progress"
                 aria-valuemin={0}
@@ -201,15 +291,16 @@ const ImageUpload = ({ onUpload }: ImageUploadProps) => {
                 aria-valuenow={Math.round(progress)}
             >
                 <div
-                className="h-full rounded-full bg-white transition-[width] duration-200 ease-out"
+                className={cn("h-full rounded-full transition-[width] duration-200 ease-out")}
                 style={{
                     width: `${Math.min(100, Math.max(0, progress))}%`,
+                    backgroundColor: variant === 'light' ? '#333C5C' : 'white',
                 }}
                 />
             </div>
-                {progress === 100 && (
+                {isUploaded  && (
                     <p className="text-green-700">
-                        Upload Successfully!
+                        {`${type.charAt(0).toUpperCase()}${type.substring(1)}`} uploaded successfully!
                         <FontAwesomeIcon icon={faCircleCheck}
                             style={{fontSize: '18px'}}
                         />
@@ -221,4 +312,4 @@ const ImageUpload = ({ onUpload }: ImageUploadProps) => {
   )
 }
 
-export default ImageUpload
+export default FileUpload

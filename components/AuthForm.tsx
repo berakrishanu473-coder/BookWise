@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "./ui/button";
 import Link from "next/link";
 import { FIELD_NAMES, FIELD_TYPES } from "@/constants";
-import ImageUpload from "./ImageUpload";
+import FileUpload from "./FileUpload";
 import { toast } from "./ui/toast";
 import { useRouter } from "next/navigation";
 
@@ -99,7 +99,12 @@ const form: UseFormReturn<T> = useForm({
                                 {FIELD_NAMES[field.name as keyof typeof FIELD_NAMES]}
                             </FieldLabel>
                             {field.name === "universityCard" ? 
-                            <ImageUpload 
+                            <FileUpload 
+                                type="image"
+                                accept="image/*"
+                                placeholder="Upload your ID"
+                                folder="ids"
+                                variant="dark"
                                 onUpload={(url) => {
                                     field.onChange(url);
                                 }}
