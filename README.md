@@ -1,7 +1,7 @@
 ## How to check ADMIN DASHBOARD
 #use this email id
-email: abc@gmail.com
-password: 12345678
+#email: abc@gmail.com
+#password: 12345678
 
 
 
